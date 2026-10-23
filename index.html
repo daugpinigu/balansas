@@ -1,0 +1,485 @@
+<!doctype html>
+<html lang="lt">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<title>Atsiskaitymai su Valera</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* Layout: two-person loan ledger - net balance with direction arrow and both gross totals, GitHub-backed entry form beside it, statement-style history with running balance below */
+:root{
+  --bg:#EEF1F0; --surface:#FFFFFF; --sunk:#F4F7F6; --fg:#15211F; --muted:#5B6B68; --line:#D6DEDC;
+  --rad:#3341BF; --rad-soft:#E7E9FA; --val:#0F766E; --val-soft:#DDF3F0;
+  --ok:#1D7449; --ok-soft:#E0F1E7; --danger:#B42318; --danger-soft:#FBE6E4;
+  --font-ui:"Onest", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-num:"IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --r:10px;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#0E1514; --surface:#151F1D; --sunk:#111A18; --fg:#E5EBEA; --muted:#93A3A0; --line:#263230;
+    --rad:#9AA5FF; --rad-soft:#1E2550; --val:#5EEAD4; --val-soft:#123A36;
+    --ok:#5FCB92; --ok-soft:#14321F; --danger:#FF8A80; --danger-soft:#3A1715;
+    color-scheme:dark;
+  }
+}
+*{box-sizing:border-box}
+html{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--font-ui);font-size:15px;line-height:1.5}
+.wrap{max-width:960px;margin:0 auto;padding-left:max(16px, env(safe-area-inset-left, 0px));padding-right:max(16px, env(safe-area-inset-right, 0px));padding-block:28px 56px;display:flex;flex-direction:column;gap:20px}
+.num{font-family:var(--font-num);font-variant-numeric:tabular-nums}
+.eyebrow{font-size:12px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+a{color:var(--rad)}
+
+header.top{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap}
+header.top h1{margin:0;font-size:clamp(1.4rem,3.4vw,1.75rem);font-weight:700;letter-spacing:-.01em;text-wrap:balance}
+.sync{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)}
+.sync::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--muted);flex:none}
+.sync[data-state="ok"]::before{background:var(--ok)}
+.sync[data-state="warn"]::before{background:var(--danger)}
+
+.grid{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,1fr);gap:20px;align-items:start}
+@media (max-width:760px){.grid{grid-template-columns:minmax(0,1fr)}}
+
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:22px}
+
+/* Balance */
+.balance{display:flex;flex-direction:column;gap:18px}
+.bal-amount{font-family:var(--font-num);font-variant-numeric:tabular-nums;font-weight:600;font-size:clamp(2.2rem,7vw,3.2rem);letter-spacing:-.03em;line-height:1.05;color:var(--muted)}
+.balance[data-dir="rv"] .bal-amount{color:var(--rad)}
+.balance[data-dir="vr"] .bal-amount{color:var(--val)}
+.balance[data-dir="eq"] .bal-amount{color:var(--ok)}
+.bal-caption{font-size:17px;font-weight:600;margin-top:4px}
+
+.flow{display:flex;align-items:center;gap:10px}
+.person{padding:6px 12px;border-radius:999px;border:1px solid var(--line);font-weight:600;font-size:14px;color:var(--muted);white-space:nowrap}
+.wire{flex:1;min-width:40px;height:2px;background:var(--line);position:relative}
+.wire::after{content:"";position:absolute;top:50%;right:-2px;transform:translateY(-50%);border:7px solid transparent;border-right:0;border-left:10px solid var(--line);display:none}
+.balance[data-dir="rv"] .wire,.balance[data-dir="vr"] .wire{height:3px}
+.balance[data-dir="rv"] .wire{background:var(--rad)}
+.balance[data-dir="rv"] .wire::after{display:block;border-left-color:var(--rad)}
+.balance[data-dir="vr"] .wire{background:var(--val);transform:scaleX(-1)}
+.balance[data-dir="vr"] .wire::after{display:block;border-left-color:var(--val)}
+.balance[data-dir="eq"] .wire{background:repeating-linear-gradient(90deg,var(--ok) 0 6px,transparent 6px 11px)}
+.balance[data-dir="rv"] .p-R{background:var(--rad-soft);color:var(--rad);border-color:transparent}
+.balance[data-dir="vr"] .p-V{background:var(--val-soft);color:var(--val);border-color:transparent}
+
+.totals{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media (max-width:420px){.totals{grid-template-columns:1fr}}
+.tot{background:var(--sunk);border-radius:8px;padding:12px 14px;display:flex;flex-direction:column;gap:4px;min-width:0}
+.tot .eyebrow{font-size:11px}
+.tot b{font-family:var(--font-num);font-variant-numeric:tabular-nums;font-weight:600;font-size:17px;overflow-wrap:anywhere}
+.tot.R b{color:var(--rad)}
+.tot.V b{color:var(--val)}
+.tot span{font-size:12px;color:var(--muted)}
+
+.bal-foot{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;padding-top:16px;border-top:1px solid var(--line)}
+.bal-meta{font-size:13px;color:var(--muted)}
+
+button{font:inherit;cursor:pointer}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;border:1px solid var(--line);background:var(--surface);color:var(--fg);padding:9px 14px;border-radius:8px;font-weight:600;font-size:14px;text-decoration:none}
+.btn:hover{background:var(--sunk)}
+.btn-primary{background:var(--fg);color:var(--surface);border-color:var(--fg)}
+.btn-primary:hover{background:var(--fg);opacity:.9}
+.btn:disabled,.btn[aria-disabled="true"]{opacity:.45;cursor:not-allowed;pointer-events:none}
+:focus-visible{outline:2px solid var(--rad);outline-offset:2px}
+
+/* Form */
+form{display:flex;flex-direction:column;gap:16px}
+.form-head{display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap}
+.form-head h2{margin:0;font-size:17px;font-weight:700}
+.form-head span{font-size:12px;color:var(--muted)}
+.types{border:0;padding:0;margin:0;display:grid;grid-template-columns:1fr 1fr;gap:8px}
+@media (max-width:420px){.types{grid-template-columns:1fr}}
+.types legend{padding:0;margin-bottom:8px}
+.opt{position:relative}
+.opt input{position:absolute;opacity:0;pointer-events:none}
+.opt label{display:flex;flex-direction:column;gap:2px;padding:10px 12px;border:1px solid var(--line);border-radius:8px;cursor:pointer;background:var(--sunk);height:100%}
+.opt label b{font-size:14px;font-weight:600}
+.opt label span{font-size:12px;color:var(--muted)}
+.opt input:focus-visible + label{outline:2px solid var(--rad);outline-offset:2px}
+.opt.R input:checked + label{border-color:var(--rad);background:var(--rad-soft)}
+.opt.R input:checked + label b{color:var(--rad)}
+.opt.V input:checked + label{border-color:var(--val);background:var(--val-soft)}
+.opt.V input:checked + label b{color:var(--val)}
+
+.field{display:flex;flex-direction:column;gap:6px;min-width:0}
+.field > span{font-size:13px;font-weight:600;color:var(--muted)}
+input[type="text"],input[type="date"]{font:inherit;color:var(--fg);background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:9px 11px;width:100%;min-width:0}
+input.money{font-family:var(--font-num);font-variant-numeric:tabular-nums;font-size:18px;font-weight:600}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media (max-width:420px){.row2{grid-template-columns:1fr}}
+
+.preview{margin:0;font-size:13px;color:var(--muted);min-height:1.5em}
+.preview b{color:var(--fg);font-family:var(--font-num);font-variant-numeric:tabular-nums}
+.actions{display:flex;gap:8px;flex-wrap:wrap}
+.msg{margin:0;font-size:13px;min-height:1.5em;color:var(--muted)}
+.msg[data-kind="ok"]{color:var(--ok)}
+.msg[data-kind="err"]{color:var(--danger)}
+.hint{margin:0;font-size:12px;color:var(--muted);line-height:1.5}
+details.json{border:1px dashed var(--line);border-radius:8px;padding:10px 12px}
+details.json summary{cursor:pointer;font-size:13px;font-weight:600;color:var(--muted)}
+details.json pre{margin:10px 0 0;font-family:var(--font-num);font-size:12px;white-space:pre-wrap;overflow-wrap:anywhere;background:var(--sunk);padding:10px;border-radius:6px}
+
+/* History */
+.hist-head{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:6px}
+.hist-head h2{margin:0;font-size:17px;font-weight:700}
+ul.rows{list-style:none;margin:0;padding:0}
+.row{display:grid;grid-template-columns:92px minmax(0,1fr) auto auto;grid-template-areas:"date main amt bal";column-gap:16px;row-gap:4px;padding:14px 0;border-top:1px solid var(--line);align-items:start}
+.row:first-child{border-top:0}
+.r-date{grid-area:date;font-family:var(--font-num);font-size:13px;color:var(--muted);padding-top:2px}
+.r-date.none{font-family:var(--font-ui);font-style:italic}
+.r-main{grid-area:main;min-width:0}
+.r-title{font-weight:600;overflow-wrap:anywhere}
+.r-meta{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;margin-top:4px;font-size:12px;color:var(--muted)}
+.r-meta a{color:var(--muted);text-decoration:none;border-bottom:1px dotted var(--line)}
+.r-meta a:hover{color:var(--fg)}
+.tag{display:inline-block;padding:1px 8px;border-radius:999px;font-weight:600;font-size:12px}
+.tag.R{background:var(--rad-soft);color:var(--rad)}
+.tag.V{background:var(--val-soft);color:var(--val)}
+.r-amt{grid-area:amt;text-align:right;font-family:var(--font-num);font-variant-numeric:tabular-nums;font-weight:600;white-space:nowrap}
+.r-amt.R{color:var(--rad)}
+.r-amt.V{color:var(--val)}
+.r-bal{grid-area:bal;text-align:right;font-family:var(--font-num);font-variant-numeric:tabular-nums;font-size:13px;color:var(--muted);white-space:nowrap;min-width:11em}
+.r-bal small{display:block;font-family:var(--font-ui);font-size:11px;letter-spacing:.06em;text-transform:uppercase}
+@media (max-width:620px){
+  .row{grid-template-columns:minmax(0,1fr) auto;grid-template-areas:"date amt" "main main" "bal bal"}
+  .r-bal{text-align:left;min-width:0}
+  .r-bal small{display:inline;margin-right:6px}
+}
+.empty{padding:22px 0 8px;color:var(--muted)}
+footer{font-size:12px;color:var(--muted);display:flex;gap:8px 16px;flex-wrap:wrap}
+footer a{color:var(--muted)}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div>
+      <div class="eyebrow">Radoslav ir Valera</div>
+      <h1>Atsiskaitymai su Valera</h1>
+    </div>
+    <div class="sync" id="sync" data-state="wait">Kraunama</div>
+  </header>
+
+  <div class="grid">
+    <section class="card balance" id="balance" data-dir="none" aria-live="polite">
+      <div>
+        <div class="eyebrow">Dabartinis balansas</div>
+        <div class="bal-amount" id="bal-amount">...</div>
+        <div class="bal-caption" id="bal-caption">Kraunami pavedimai</div>
+      </div>
+      <div class="flow" aria-hidden="true">
+        <span class="person p-R">Radoslav</span>
+        <span class="wire"></span>
+        <span class="person p-V">Valera</span>
+      </div>
+      <div class="totals">
+        <div class="tot R"><span class="eyebrow">Radoslav pervedė Valerai</span><b id="tot-R">...</b><span id="cnt-R"></span></div>
+        <div class="tot V"><span class="eyebrow">Valera pervedė Radoslavui</span><b id="tot-V">...</b><span id="cnt-V"></span></div>
+      </div>
+      <div class="bal-foot">
+        <span class="bal-meta" id="bal-meta"></span>
+        <button type="button" class="btn" id="settle" hidden>Užfiksuoti grąžinimą</button>
+      </div>
+    </section>
+
+    <section class="card">
+      <form id="entry-form" novalidate>
+        <div class="form-head">
+          <h2>Naujas pavedimas</h2>
+          <span>Įrašo tik Radoslav, per GitHub</span>
+        </div>
+
+        <fieldset class="types">
+          <legend class="eyebrow">Kas kam pervedė</legend>
+          <div class="opt R"><input type="radio" name="side" id="s-R" value="R" checked><label for="s-R"><b>Radoslav pervedė Valerai</b><span>Valera skolingas daugiau</span></label></div>
+          <div class="opt V"><input type="radio" name="side" id="s-V" value="V"><label for="s-V"><b>Valera pervedė Radoslavui</b><span>Valera skolingas mažiau</span></label></div>
+        </fieldset>
+
+        <label class="field"><span>Suma, €</span>
+          <input type="text" class="money" id="amount" inputmode="decimal" autocomplete="off" placeholder="0,00">
+        </label>
+
+        <div class="row2">
+          <label class="field"><span>Data</span><input type="date" id="date"></label>
+          <label class="field"><span>Pastaba</span>
+            <input type="text" id="note" autocomplete="off" placeholder="pvz. grąžinimas, paskola butui">
+          </label>
+        </div>
+
+        <p class="preview" id="preview"></p>
+        <div class="actions">
+          <a class="btn btn-primary" id="gh-new" href="#" target="_blank" rel="noopener" aria-disabled="true">Įrašyti GitHub'e</a>
+          <button type="button" class="btn" id="copy" disabled>Kopijuoti JSON</button>
+        </div>
+        <p class="msg" id="form-msg" role="status"></p>
+        <p class="hint">Atsidarys GitHub su paruoštu failu, ten spausk <b>Commit changes</b>. Puslapis atsinaujins per maždaug minutę. Reikia būti prisijungus kaip daugpinigu.</p>
+        <details class="json" id="json-box">
+          <summary>Įrašo failas</summary>
+          <pre id="json-pre"></pre>
+        </details>
+      </form>
+    </section>
+  </div>
+
+  <section class="card">
+    <div class="hist-head">
+      <h2>Pavedimų istorija</h2>
+      <span class="eyebrow">Naujausi viršuje</span>
+    </div>
+    <ul class="rows" id="rows"></ul>
+    <p class="empty" id="empty">Pavedimai kraunami.</p>
+  </section>
+
+  <footer>
+    <span id="generated"></span>
+    <a id="repo-link" href="#" target="_blank" rel="noopener">Šaltinis GitHub'e</a>
+    <button type="button" class="btn" id="reload" style="padding:4px 10px;font-size:12px">Perkrauti</button>
+  </footer>
+</div>
+
+<script>
+(function(){
+  var REPO = "daugpinigu/balansas";
+  var GH = "https://github.com/" + REPO;
+  var SIDES = {
+    R: {sign: 1, tag:"Radoslav → Valera", title:"Pervedimas Valerai",    done:"Radoslav pervedė Valerai"},
+    V: {sign:-1, tag:"Valera → Radoslav", title:"Pervedimas iš Valeros", done:"Valera pervedė Radoslavui"}
+  };
+  var fmt = new Intl.NumberFormat("lt-LT", {style:"currency", currency:"EUR"});
+  function money(c){ return fmt.format(c/100); }
+  function $(id){ return document.getElementById(id); }
+
+  var entries = [], loaded = false, generated = "";
+
+  function pad(n){ return String(n).padStart(2, "0"); }
+  function today(){
+    var d = new Date();
+    return d.getFullYear() + "-" + pad(d.getMonth()+1) + "-" + pad(d.getDate());
+  }
+  function stamp(){
+    var d = new Date();
+    return d.getFullYear() + "-" + pad(d.getMonth()+1) + "-" + pad(d.getDate()) + "-" + pad(d.getHours()) + pad(d.getMinutes()) + pad(d.getSeconds());
+  }
+  function plural(n, one, few, many){
+    var a = n % 10, b = n % 100;
+    if (a === 1 && b !== 11) return one;
+    if (a >= 2 && a <= 9 && (b < 10 || b >= 20)) return few;
+    return many;
+  }
+  function parseNum(s){
+    s = String(s || "").replace(/[\s ]/g, "").replace(",", ".");
+    if (!/^\d+(\.\d+)?$/.test(s)) return null;
+    return parseFloat(s);
+  }
+  function parseCents(s){
+    var n = parseNum(s);
+    if (n === null) return null;
+    var c = Math.round(n * 100);
+    return c > 0 ? c : null;
+  }
+  function side(e){ return SIDES[e.from] || null; }
+  function delta(e){
+    var s = side(e), c = Number(e.cents);
+    return s && isFinite(c) ? s.sign * c : 0;
+  }
+  /* Undated entries (seeded history, ordered by seq) come first, then dated ones chronologically. */
+  function sortKey(e){
+    var d = e.date || "";
+    var seq = e.seq ? String(e.seq).padStart(4, "0") : "";
+    return (d ? "1" + d : "0" + seq) + "|" + (e.id || "");
+  }
+  function sorted(){
+    return entries.slice().sort(function(a, b){ var ka = sortKey(a), kb = sortKey(b); return ka < kb ? -1 : ka > kb ? 1 : 0; });
+  }
+  function total(list){ return list.reduce(function(s, e){ return s + delta(e); }, 0); }
+  function sumSide(list, from){ return list.reduce(function(s, e){ return s + (e.from === from ? (Number(e.cents) || 0) : 0); }, 0); }
+  function balText(c){
+    if (c > 0) return "Valera skolingas Radoslavui " + money(c);
+    if (c < 0) return "Radoslav skolingas Valerai " + money(-c);
+    return "atsiskaityta";
+  }
+  function h(tag, cls, text){
+    var el = document.createElement(tag);
+    if (cls) el.className = cls;
+    if (text != null) el.textContent = text;
+    return el;
+  }
+  function setSync(text, state){ var s = $("sync"); s.textContent = text; s.dataset.state = state; }
+  function setMsg(text, kind){ var m = $("form-msg"); m.textContent = text || ""; m.dataset.kind = kind || ""; }
+
+  /* ---------- render ---------- */
+  function renderBalance(){
+    var box = $("balance");
+    if (!loaded){ box.dataset.dir = "none"; return; }
+    var bal = total(entries);
+    box.dataset.dir = bal > 0 ? "vr" : bal < 0 ? "rv" : "eq";
+    $("bal-amount").textContent = money(Math.abs(bal));
+    $("bal-caption").textContent = bal > 0 ? "Valera skolingas Radoslavui"
+                                 : bal < 0 ? "Radoslav skolingas Valerai"
+                                 : "Atsiskaityta, niekas niekam neskolingas";
+    var nR = entries.filter(function(e){ return e.from === "R"; }).length;
+    var nV = entries.filter(function(e){ return e.from === "V"; }).length;
+    $("tot-R").textContent = money(sumSide(entries, "R"));
+    $("tot-V").textContent = money(sumSide(entries, "V"));
+    $("cnt-R").textContent = nR + " " + plural(nR, "pavedimas", "pavedimai", "pavedimų");
+    $("cnt-V").textContent = nV + " " + plural(nV, "pavedimas", "pavedimai", "pavedimų");
+    var list = sorted();
+    var last = list.length ? list[list.length-1] : null;
+    $("bal-meta").textContent = list.length
+      ? list.length + " " + plural(list.length, "pavedimas", "pavedimai", "pavedimų") + (last && last.date ? " · paskutinis " + last.date : "")
+      : "Pavedimų dar nėra";
+    var settle = $("settle");
+    settle.hidden = bal === 0;
+    settle.textContent = bal > 0 ? "Valera grąžina " + money(bal) : "Radoslav grąžina " + money(-bal);
+  }
+
+  function renderRows(){
+    var ul = $("rows"), empty = $("empty");
+    ul.textContent = "";
+    if (!loaded){ return; }
+    var list = sorted();
+    empty.hidden = list.length > 0;
+    empty.textContent = "Pavedimų dar nėra.";
+    var run = 0;
+    var rows = list.map(function(e){ run += delta(e); return {e:e, run:run}; }).reverse();
+    rows.forEach(function(r){
+      var e = r.e, s = side(e);
+      if (!s) return;
+      var li = h("li", "row");
+      li.appendChild(h("div", "r-date" + (e.date ? "" : " none"), e.date || "be datos"));
+
+      var main = h("div", "r-main");
+      main.appendChild(h("div", "r-title", e.note || s.title));
+      var meta = h("div", "r-meta");
+      meta.appendChild(h("span", "tag " + e.from, s.tag));
+      if (e.seq) meta.appendChild(h("span", "", "nr. " + e.seq));
+      if (e.file){
+        var a = h("a", "", "GitHub");
+        a.href = GH + "/edit/main/entries/" + encodeURIComponent(e.file);
+        a.target = "_blank"; a.rel = "noopener"; a.title = "Redaguoti arba ištrinti šį įrašą GitHub'e";
+        meta.appendChild(a);
+      }
+      main.appendChild(meta);
+      li.appendChild(main);
+
+      li.appendChild(h("div", "r-amt " + e.from, (e.from === "R" ? "→ " : "← ") + money(Number(e.cents) || 0)));
+
+      var bal = h("div", "r-bal");
+      bal.appendChild(h("small", "", "Likutis"));
+      bal.appendChild(document.createTextNode(r.run > 0 ? "Valera skolingas " + money(r.run) : r.run < 0 ? "Radoslav skolingas " + money(-r.run) : money(0)));
+      li.appendChild(bal);
+      ul.appendChild(li);
+    });
+  }
+
+  function currentSide(){
+    var r = document.querySelector('input[name="side"]:checked');
+    return r ? r.value : "R";
+  }
+
+  function entryJson(){
+    var cents = parseCents($("amount").value);
+    if (cents === null) return null;
+    var doc = { date: $("date").value || "", from: currentSide(), amount: Math.round(cents) / 100, note: $("note").value.trim().slice(0, 200) };
+    return JSON.stringify(doc, null, 2) + "\n";
+  }
+
+  function renderForm(){
+    var key = currentSide();
+    var cents = parseCents($("amount").value);
+    var p = $("preview"), link = $("gh-new"), copy = $("copy"), pre = $("json-pre");
+    p.textContent = "";
+    var json = entryJson();
+    if (json === null){
+      link.setAttribute("aria-disabled", "true"); link.href = "#"; copy.disabled = true; pre.textContent = "";
+      return;
+    }
+    pre.textContent = json;
+    var file = "entries/" + stamp() + ".json";
+    link.href = GH + "/new/main?filename=" + encodeURIComponent(file) + "&value=" + encodeURIComponent(json);
+    link.removeAttribute("aria-disabled");
+    copy.disabled = false;
+    if (loaded){
+      var after = total(entries) + SIDES[key].sign * cents;
+      p.appendChild(document.createTextNode("Po įrašo: "));
+      p.appendChild(h("b", "", balText(after)));
+    }
+  }
+
+  function render(){ renderBalance(); renderRows(); renderForm(); }
+
+  /* ---------- form ---------- */
+  function resetForm(){
+    $("s-R").checked = true;
+    $("amount").value = "";
+    $("note").value = ""; $("date").value = today();
+  }
+
+  $("entry-form").addEventListener("submit", function(ev){ ev.preventDefault(); });
+  $("entry-form").addEventListener("change", renderForm);
+  $("amount").addEventListener("input", renderForm);
+  $("note").addEventListener("input", renderForm);
+  $("gh-new").addEventListener("click", function(ev){
+    if (this.getAttribute("aria-disabled") === "true"){ ev.preventDefault(); setMsg("Įvesk sumą, pvz. 4955,39 arba 26 000.", "err"); $("amount").focus(); return; }
+    renderForm();
+    setMsg("Atidaryta GitHub'e. Po commit'o spausk Perkrauti po minutės.", "ok");
+  });
+  $("copy").addEventListener("click", function(){
+    var json = entryJson();
+    if (json === null) return;
+    var done = function(){ setMsg("JSON nukopijuotas. Įklijuok į naują failą entries/ aplanke.", "ok"); };
+    if (navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(json).then(done, function(){ $("json-box").open = true; setMsg("Nepavyko kopijuoti, nusikopijuok iš lauko žemiau.", "err"); });
+    } else { $("json-box").open = true; setMsg("Nusikopijuok iš lauko žemiau.", ""); }
+  });
+  $("settle").addEventListener("click", function(){
+    var bal = total(entries);
+    if (!bal) return;
+    resetForm();
+    $(bal > 0 ? "s-V" : "s-R").checked = true;
+    $("amount").value = (Math.abs(bal) / 100).toFixed(2).replace(".", ",");
+    $("note").value = "Skolos grąžinimas";
+    setMsg("Patikrink sumą ir spausk Įrašyti GitHub'e.", "");
+    renderForm();
+    $("amount").focus();
+  });
+  $("reload").addEventListener("click", load);
+  $("repo-link").href = GH;
+
+  /* ---------- data ---------- */
+  async function load(){
+    setSync("Kraunama", "wait");
+    try {
+      var res = await fetch("data.json?t=" + Date.now(), {cache: "no-store"});
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      var data = await res.json();
+      entries = Array.isArray(data.entries) ? data.entries : [];
+      generated = data.generated || "";
+      loaded = true;
+      setSync("Atnaujinta " + generated, "ok");
+      $("generated").textContent = "Duomenys sugeneruoti " + generated + " (Vilnius)";
+      render();
+    } catch (err){
+      setSync("Nepavyko užkrauti duomenų (" + (err && err.message || "klaida") + ")", "warn");
+      if (!loaded){
+        $("bal-amount").textContent = "-";
+        $("bal-caption").textContent = "Pabandyk perkrauti puslapį";
+        $("empty").textContent = "Duomenų užkrauti nepavyko.";
+      }
+    }
+  }
+
+  resetForm();
+  render();
+  load();
+})();
+</script>
+</body>
+</html>
