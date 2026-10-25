@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 """Surenka entries/*.json i _site/data.json ir nukopijuoja index.html.
 
-Iraso failas: {"date": "YYYY-MM-DD" arba "", "from": "R" | "V", "amount": 4955.39, "note": "", "seq": 1 (tik pradinei istorijai)}
+Iraso failas: {"date": "YYYY-MM-DD" arba "", "from": "R" | "V", "amount": 4955.39, "note": "", "seq": 1 (tik pradinei istorijai),
+               "kind": "portfolio" (neprivalomas: verte perduota natura, pvz. Freedom24 portfelis - skaiciuojama i balansa, bet rodoma atskirai)}
 """
 import glob, json, os, shutil, sys
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
+KINDS = ("portfolio",)
 ROOT = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(ROOT, "_site")
 errors, entries = [], []
@@ -38,11 +40,17 @@ for path in sorted(glob.glob(os.path.join(ROOT, "entries", "*.json"))):
     if date and (len(date) != 10 or date[4] != "-" or date[7] != "-"):
         errors.append(f'{name}: "date" formatas YYYY-MM-DD arba tuscias')
         continue
+    kind = str(raw.get("kind", "") or "").strip().lower()
+    if kind and kind not in KINDS:
+        errors.append(f'{name}: "kind" gali buti tik {", ".join(KINDS)} arba nenurodytas')
+        continue
     seq = raw.get("seq")
     entry = {"id": name[:-5], "file": name, "date": date, "from": side, "cents": cents,
              "note": str(raw.get("note", "") or "").strip()[:200]}
     if isinstance(seq, int) and seq > 0:
         entry["seq"] = seq
+    if kind:
+        entry["kind"] = kind
     entries.append(entry)
 
 if errors:
@@ -54,11 +62,14 @@ if errors:
 tot_r = sum(e["cents"] for e in entries if e["from"] == "R")
 tot_v = sum(e["cents"] for e in entries if e["from"] == "V")
 now = datetime.now(ZoneInfo("Europe/Vilnius"))
+kind_r = sum(e["cents"] for e in entries if e["from"] == "R" and e.get("kind"))
+kind_v = sum(e["cents"] for e in entries if e["from"] == "V" and e.get("kind"))
 data = {"generated": now.strftime("%Y-%m-%d %H:%M"), "count": len(entries),
-        "totalR": tot_r, "totalV": tot_v, "balance": tot_r - tot_v, "entries": entries}
+        "totalR": tot_r, "totalV": tot_v, "inKindR": kind_r, "inKindV": kind_v,
+        "balance": tot_r - tot_v, "entries": entries}
 
 os.makedirs(OUT, exist_ok=True)
 with open(os.path.join(OUT, "data.json"), "w", encoding="utf-8") as fh:
     json.dump(data, fh, ensure_ascii=False, indent=1)
 shutil.copy(os.path.join(ROOT, "index.html"), os.path.join(OUT, "index.html"))
-print(f"{len(entries)} irasu | R->V {tot_r/100:.2f} | V->R {tot_v/100:.2f} | balansas {(tot_r-tot_v)/100:.2f}")
+print(f"{len(entries)} irasu | R->V {tot_r/100:.2f} | V->R {tot_v/100:.2f} (natura {kind_v/100:.2f}) | balansas {(tot_r-tot_v)/100:.2f}")

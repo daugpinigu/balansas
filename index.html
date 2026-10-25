@@ -54,6 +54,11 @@ header.top h1{margin:0;font-size:clamp(1.4rem,3.4vw,1.75rem);font-weight:700;let
 .balance[data-dir="vr"] .bal-amount{color:var(--val)}
 .balance[data-dir="eq"] .bal-amount{color:var(--ok)}
 .bal-caption{font-size:17px;font-weight:600;margin-top:4px}
+.inkind{display:flex;flex-direction:column;gap:4px;padding:12px 14px;border-radius:8px;background:var(--val-soft);border:1px dashed var(--val)}
+.inkind .eyebrow{color:var(--val)}
+.inkind b{font-family:var(--font-num);font-variant-numeric:tabular-nums;font-weight:600;font-size:19px;color:var(--val);overflow-wrap:anywhere}
+.inkind b small{font-family:var(--font-ui);font-size:13px;font-weight:500;margin-left:6px}
+.inkind span.txt{font-size:13px;color:var(--muted);line-height:1.45}
 
 .flow{display:flex;align-items:center;gap:10px}
 .person{padding:6px 12px;border-radius:999px;border:1px solid var(--line);font-weight:600;font-size:14px;color:var(--muted);white-space:nowrap}
@@ -141,6 +146,7 @@ ul.rows{list-style:none;margin:0;padding:0}
 .tag{display:inline-block;padding:1px 8px;border-radius:999px;font-weight:600;font-size:12px}
 .tag.R{background:var(--rad-soft);color:var(--rad)}
 .tag.V{background:var(--val-soft);color:var(--val)}
+.tag.kind{background:transparent;color:var(--val);border:1px dashed var(--val)}
 .r-amt{grid-area:amt;text-align:right;font-family:var(--font-num);font-variant-numeric:tabular-nums;font-weight:600;white-space:nowrap}
 .r-amt.R{color:var(--rad)}
 .r-amt.V{color:var(--val)}
@@ -173,6 +179,11 @@ footer a{color:var(--muted)}
         <div class="eyebrow">Dabartinis balansas</div>
         <div class="bal-amount" id="bal-amount">...</div>
         <div class="bal-caption" id="bal-caption">Kraunami pavedimai</div>
+      </div>
+      <div class="inkind" id="inkind" hidden>
+        <span class="eyebrow" id="inkind-head">Plius natūra</span>
+        <b id="inkind-amt"></b>
+        <span class="txt" id="inkind-text"></span>
       </div>
       <div class="flow" aria-hidden="true">
         <span class="person p-R">Radoslav</span>
@@ -285,6 +296,8 @@ footer a{color:var(--muted)}
     return c > 0 ? c : null;
   }
   function side(e){ return SIDES[e.from] || null; }
+  function inKind(e){ return !!e.kind; }
+  function sumKind(list, from){ return list.reduce(function(s, e){ return s + (e.from === from && inKind(e) ? (Number(e.cents) || 0) : 0); }, 0); }
   function delta(e){
     var s = side(e), c = Number(e.cents);
     return s && isFinite(c) ? s.sign * c : 0;
@@ -321,15 +334,28 @@ footer a{color:var(--muted)}
     var bal = total(entries);
     box.dataset.dir = bal > 0 ? "vr" : bal < 0 ? "rv" : "eq";
     $("bal-amount").textContent = money(Math.abs(bal));
-    $("bal-caption").textContent = bal > 0 ? "Valera skolingas Radoslavui"
-                                 : bal < 0 ? "Radoslav skolingas Valerai"
-                                 : "Atsiskaityta, niekas niekam neskolingas";
-    var nR = entries.filter(function(e){ return e.from === "R"; }).length;
-    var nV = entries.filter(function(e){ return e.from === "V"; }).length;
+    var kindV = sumKind(entries, "V"), kindR = sumKind(entries, "R");
+    var kinds = entries.filter(inKind);
+    var hasKind = kinds.length > 0;
+    $("bal-caption").textContent = bal > 0 ? (hasKind ? "Valera skolingas Radoslavui grynais" : "Valera skolingas Radoslavui")
+                                 : bal < 0 ? (hasKind ? "Radoslav skolingas Valerai grynais" : "Radoslav skolingas Valerai")
+                                 : (hasKind ? "Grynais atsiskaityta" : "Atsiskaityta, niekas niekam neskolingas");
+    var ik = $("inkind");
+    ik.hidden = !hasKind;
+    if (hasKind){
+      var who = kindV >= kindR ? "Valera" : "Radoslav";
+      $("inkind-head").textContent = "Plius natūra: " + who + " perdavė portfelį";
+      var amt = $("inkind-amt");
+      amt.textContent = money(kindV >= kindR ? kindV : kindR);
+      amt.appendChild(h("small", "", "nominalas"));
+      $("inkind-text").textContent = kinds.map(function(e){ return e.note; }).filter(Boolean).join(" ");
+    }
+    var nR = entries.filter(function(e){ return e.from === "R" && !inKind(e); }).length;
+    var nV = entries.filter(function(e){ return e.from === "V" && !inKind(e); }).length;
     $("tot-R").textContent = money(sumSide(entries, "R"));
     $("tot-V").textContent = money(sumSide(entries, "V"));
-    $("cnt-R").textContent = nR + " " + plural(nR, "pavedimas", "pavedimai", "pavedimų");
-    $("cnt-V").textContent = nV + " " + plural(nV, "pavedimas", "pavedimai", "pavedimų");
+    $("cnt-R").textContent = nR + " " + plural(nR, "pavedimas", "pavedimai", "pavedimų") + (kindR ? " + " + money(kindR) + " natūra" : "");
+    $("cnt-V").textContent = nV + " " + plural(nV, "pavedimas", "pavedimai", "pavedimų") + (kindV ? " + " + money(kindV) + " natūra" : "");
     var list = sorted();
     var last = list.length ? list[list.length-1] : null;
     $("bal-meta").textContent = list.length
@@ -359,6 +385,7 @@ footer a{color:var(--muted)}
       main.appendChild(h("div", "r-title", e.note || s.title));
       var meta = h("div", "r-meta");
       meta.appendChild(h("span", "tag " + e.from, s.tag));
+      if (inKind(e)) meta.appendChild(h("span", "tag kind", "natūra · nominalas"));
       if (e.seq) meta.appendChild(h("span", "", "nr. " + e.seq));
       if (e.file){
         var a = h("a", "", "GitHub");
